@@ -34,7 +34,7 @@ ProximaForge is a powerful and intuitive script that allows developers to quickl
 1.  Clone the repository:
     
     ```
-    git clone https://github.com/yourusername/ProximaForge.git
+    git clone https://github.com/Pakheria/ProximaForge.git
     ```
     
 2.  Navigate to the project directory:
