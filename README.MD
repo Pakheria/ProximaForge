@@ -185,4 +185,4 @@ This project is licensed under the MIT License. See the `LICENSE` file for more 
 
 ## Contact
 
-For further questions or suggestions, please contact us at support@proximalink.com.
+For further questions or suggestions, please contact us at proximalinkpk@gmail.com.
