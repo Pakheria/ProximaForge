@@ -1,0 +1,39 @@
+proximaguard/
+│
+├── main.py
+├── .env
+├── requirements.txt
+│
+├── database/
+│   ├── db_connection.py
+│   ├── init_db.py
+│   ├── ad_users_db_setup.py
+│   ├── monitoring_db_setup.py
+│
+├── active_directory/
+│   ├── ad_sync.py
+│   ├── ad_user_creation.py
+│   ├── ad_user_util.py
+│
+└── tests/
+│   ├── test_db_connection.py
+│   ├── test_ad_sync.py
+│   ├── test_user_creation.py
+├── user_management/
+│   ├── user_creation_gui.py
+│   ├── user_util.py
+│
+├── config/
+│   ├── config.py
+│   ├── logging_util.py
+│
+├── monitoring/
+│   ├── keystroke_logger.py
+│   ├── clipboard_logger.py
+│   ├── screenshot_logger.py
+│   ├── monitoring_db_setup.py
+│
+├── utils/
+    ├── encryption.py
+    ├── logging_util.py
+    ├── helper_functions.py
