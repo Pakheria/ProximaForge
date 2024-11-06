@@ -1,8 +1,10 @@
 import os
 import json
 import openai
-import customtkinter as ctk
-from tkinter import messagebox, filedialog, simpledialog, ttk
+from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
+                               QTreeWidget, QTreeWidgetItem, QFileDialog, QMessageBox, QComboBox, QTextEdit, QInputDialog, QFrame, QCheckBox)
+from PySide6.QtGui import QIcon, QColor, QPalette
+from PySide6.QtCore import Qt
 
 HISTORY_FILE = "project_history.json"
 
@@ -39,25 +41,25 @@ def add_project_element(tree, parent, element_name, element_type):
     if element_type == "folder":
         # Validate that folder name is not a file with extension
         if '.' in element_name:
-            messagebox.showerror("Invalid Folder Name", "Folder name cannot contain an extension.")
+            QMessageBox.critical(None, "Invalid Folder Name", "Folder name cannot contain an extension.")
             return
-        node = tree.insert(parent, 'end', text=element_name, open=True)
-        tree.set(node, "type", "folder")
+        node = QTreeWidgetItem(parent, [element_name])
+        node.setData(0, Qt.UserRole, "folder")
     elif element_type == "file":
         # Validate that file name contains an extension or is a known extension-only file
         if '.' not in element_name and element_name not in ['.env', '.gitignore', '.dockerignore']:
-            messagebox.showerror("Invalid File Name", "File name must contain an extension or be a valid special file like .env or .gitignore.")
+            QMessageBox.critical(None, "Invalid File Name", "File name must contain an extension or be a valid special file like .env or .gitignore.")
             return
-        node = tree.insert(parent, 'end', text=element_name, open=False)
-        tree.set(node, "type", "file")
+        node = QTreeWidgetItem(parent, [element_name])
+        node.setData(0, Qt.UserRole, "file")
 
-# Function to parse the tkinter Treeview structure into a nested dictionary
-def parse_tree_to_dict(tree, parent=''):
-    items = tree.get_children(parent)
+# Function to parse the QTreeWidget structure into a nested dictionary
+def parse_tree_to_dict(tree, parent=None):
     structure = {}
-    for item in items:
-        item_text = tree.item(item, 'text')
-        item_type = tree.set(item, "type")
+    for i in range(parent.childCount() if parent else tree.topLevelItemCount()):
+        item = parent.child(i) if parent else tree.topLevelItem(i)
+        item_text = item.text(0)
+        item_type = item.data(0, Qt.UserRole)
         if item_type == 'folder':
             structure[item_text] = parse_tree_to_dict(tree, item)
         elif item_type == 'file':
@@ -72,17 +74,17 @@ def create_project_structure(base_path, structure, log_text):
             if not os.path.exists(current_path):
                 try:
                     os.makedirs(current_path)
-                    log_text.insert(ctk.END, f"Created folder: {current_path}\n")
+                    log_text.append(f"Created folder: {current_path}\n")
                 except Exception as e:
-                    log_text.insert(ctk.END, f"Failed to create folder {current_path}: {str(e)}\n")
+                    log_text.append(f"Failed to create folder {current_path}: {str(e)}\n")
             create_project_structure(current_path, value, log_text)
         else:
             try:
                 with open(current_path, 'w') as f:
                     pass  # Create an empty file
-                log_text.insert(ctk.END, f"Created file: {current_path}\n")
+                log_text.append(f"Created file: {current_path}\n")
             except Exception as e:
-                log_text.insert(ctk.END, f"Failed to create file {current_path}: {str(e)}\n")
+                log_text.append(f"Failed to create file {current_path}: {str(e)}\n")
 
 # Function to integrate AI-based suggestions
 def get_ai_suggestions(prompt, api_key):
@@ -101,207 +103,288 @@ def get_ai_suggestions(prompt, api_key):
     except Exception as e:
         return f"Error: {str(e)}"
 
-def main():
-    # Initialize the main GUI window
-    global root
-    root = ctk.CTk()
-    root.title("Project Structure Creator")
-    width = root.winfo_screenwidth()
-    height = root.winfo_screenheight()
-    root.geometry("{}x{}+0+0".format(width, height))
+class ProjectStructureApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Project Structure Creator")
+        self.setGeometry(0, 0, 1000, 800)
+        self.setWindowIcon(QIcon("app_icon.png"))  # Set the application icon
+        
+        self.layout = QVBoxLayout(self)
+        self.layout.setContentsMargins(10, 10, 10, 10)
+        self.layout.setSpacing(10)
 
-    # Theme selection
-    ctk.set_appearance_mode("System")  # Can be "System", "Dark", or "Light"
+        # Top Row: Project Name and Theme Toggle
+        self.top_row_layout = QHBoxLayout()
+        self.top_row_layout.setSpacing(10)
 
-    def change_theme(theme):
-        ctk.set_appearance_mode(theme)
+        # Project Name Input
+        self.project_name_label = QLabel("Enter Project Name:")
+        self.project_name_label.setStyleSheet("font-size: 16px;")
+        self.project_name_entry = QLineEdit()
+        self.project_name_entry.setFixedHeight(30)
+        self.project_name_entry.setFixedWidth(400)
+        
+        # Theme Toggle Button
+        self.theme_button = QPushButton("Toggle Theme")
+        self.theme_button.setFixedSize(150, 40)
+        self.theme_button.clicked.connect(self.toggle_theme)
 
-    # Create the main frame
-    main_frame = ctk.CTkFrame(root)
-    main_frame.pack(fill=ctk.BOTH, expand=True, padx=10, pady=10)
+        self.top_row_layout.addWidget(self.project_name_label)
+        self.top_row_layout.addWidget(self.project_name_entry)
+        self.top_row_layout.addStretch()
+        self.top_row_layout.addWidget(self.theme_button)
+        self.layout.addLayout(self.top_row_layout)
 
-    # Project Name Input
-    project_frame = ctk.CTkFrame(main_frame)
-    project_frame.grid(row=0, column=3, padx=10, pady=5)
-    project_name_label = ctk.CTkLabel(project_frame, text="Enter Project Name:")
-    project_name_label.pack(anchor='w')
-    project_name_entry = ctk.CTkEntry(main_frame)
-    project_name_entry.grid(row=0, column=1, pady=5)
+        # API Key Input
+        self.api_key_label = QLabel("Enter OpenAI API Key (Optional):")
+        self.api_key_label.setStyleSheet("font-size: 16px;")
+        self.api_key_entry = QLineEdit()
+        self.api_key_entry.setEchoMode(QLineEdit.Password)
+        self.api_key_entry.setFixedHeight(30)
+        self.layout.addWidget(self.api_key_label)
+        self.layout.addWidget(self.api_key_entry)
 
-    # API Key Input
-    api_key_label = ctk.CTkLabel(main_frame, text="Enter OpenAI API Key (Optional):")
-    api_key_label.grid(row=1, column=0, pady=5)
-    api_key_entry = ctk.CTkEntry(main_frame, show="*")
-    api_key_entry.grid(row=1, column=1, pady=5)
+        # History Dropdown
+        self.history_label = QLabel("Load From History:")
+        self.history_label.setStyleSheet("font-size: 16px;")
+        self.history_dropdown = QComboBox()
+        self.history_dropdown.setFixedHeight(30)
+        self.load_history_options()
+        self.layout.addWidget(self.history_label)
+        self.layout.addWidget(self.history_dropdown)
 
-    # Instructions Panel
-    instructions_frame = ctk.CTkFrame(main_frame)
-    instructions_frame.grid(row=1, column=3, padx=10, pady=10, sticky='n')
-    instructions_label = ctk.CTkLabel(instructions_frame, text="Instructions:", font=('Helvetica', 14, 'bold'))
-    instructions_label.pack(anchor='w')
-    instructions_text = (
-        "1. Enter the Project Name in the input box.\n"
-        "2. Use the buttons below to add folders or files to your project structure.\n"
-        "   - 'Add Sibling Folder': Adds a folder at the same level as the selected item.\n"
-        "   - 'Add Sibling File': Adds a file at the same level as the selected item.\n"
-        "   - 'Add Child Folder': Adds a sub-folder under the selected folder.\n"
-        "3. File names must have valid extensions (e.g., .py, .txt) or be valid special files (e.g., .env).\n"
-        "4. Click 'Create Project Structure' to generate the folders and files at the selected location.\n"
-        "5. Use 'Delete' to remove any selected item from the structure.\n"
-        "6. You can also load from history using the dropdown menu.\n"
-        "7. Use the 'Get AI Suggestions' button to generate suggestions for the folder structure based on AI."
-    )
-    instructions_label = ctk.CTkLabel(instructions_frame, text=instructions_text, justify='left')
-    instructions_label.pack(anchor='w')
+        self.load_history_button = QPushButton("Load")
+        self.load_history_button.setFixedSize(150, 40)
+        self.load_history_button.clicked.connect(self.load_selected_history)
+        self.layout.addWidget(self.load_history_button)
 
-    # Theme Toggle
-    theme_frame = ctk.CTkFrame(main_frame)
-    theme_frame.grid(row=0, column=3, padx=10, pady=5)
-    theme_label = ctk.CTkLabel(theme_frame, text="Select Theme:")
-    theme_label.pack(anchor='w')
-    theme_button_dark = ctk.CTkButton(theme_frame, text="Dark", command=lambda: change_theme("Dark"))
-    theme_button_dark.pack(anchor='w', pady=10, padx=4)
-    theme_button_light = ctk.CTkButton(theme_frame, text="Light", command=lambda: change_theme("Light"))
-    theme_button_light.pack(anchor='w', pady=10, padx=4)
+        # Tree for project structure visualization and Manual Paste Toggle
+        self.tree_layout = QHBoxLayout()
+        self.tree_layout.setSpacing(10)
+        self.tree = QTreeWidget()
+        self.tree.setHeaderLabel("Project Structure")
+        self.tree.setStyleSheet("font-size: 14px;")
+        self.tree_layout.addWidget(self.tree)
 
-    # History Dropdown Menu
-    history_frame = ctk.CTkFrame(main_frame)
-    history_frame.grid(row=0, column=2, padx=10, pady=5)
-    history_label = ctk.CTkLabel(history_frame, text="Load From History:")
-    history_label.pack(anchor='w')
-    history_options = load_history()
-    history_names = [list(entry.keys())[0] for entry in history_options] if history_options else []
-    history_var = ctk.StringVar()
-    history_dropdown = ctk.CTkComboBox(history_frame, values=history_names, variable=history_var)
-    history_dropdown.pack(anchor='w', pady=10)
+        # Toggle to add manually or by buttons
+        self.manual_add_toggle = QCheckBox("Add Project Structure Manually")
+        self.manual_add_toggle.setStyleSheet("font-size: 14px;")
+        self.manual_add_toggle.toggled.connect(self.toggle_manual_add)
+        self.tree_layout.addWidget(self.manual_add_toggle)
+        
+        # Manual Paste Area
+        self.manual_paste_text = QTextEdit()
+        self.manual_paste_text.setPlaceholderText("Paste your pre-defined project structure here...")
+        self.manual_paste_text.setDisabled(True)
+        self.tree_layout.addWidget(self.manual_paste_text)
+        
+        self.layout.addLayout(self.tree_layout)
 
-    def load_selected_history():
-        selected_project = history_var.get()
+        # Buttons to Add Elements
+        self.button_layout = QHBoxLayout()
+        self.button_layout.setSpacing(10)
+        self.add_sibling_folder_button = QPushButton("Add Sibling Folder")
+        self.add_sibling_folder_button.setFixedSize(200, 50)
+        
+        self.add_sibling_file_button = QPushButton("Add Sibling File")
+        self.add_sibling_file_button.setFixedSize(200, 50)
+        
+        self.add_child_folder_button = QPushButton("Add Child Folder")
+        self.add_child_folder_button.setFixedSize(200, 50)
+
+        self.button_layout.addWidget(self.add_sibling_folder_button)
+        self.button_layout.addWidget(self.add_sibling_file_button)
+        self.button_layout.addWidget(self.add_child_folder_button)
+
+        self.add_sibling_folder_button.clicked.connect(self.add_sibling_folder)
+        self.add_sibling_file_button.clicked.connect(self.add_sibling_file)
+        self.add_child_folder_button.clicked.connect(self.add_child_folder)
+
+        self.layout.addLayout(self.button_layout)
+
+        # Separator between Add Elements and Main Functions
+        self.separator = QFrame()
+        self.separator.setFrameShape(QFrame.HLine)
+        self.separator.setFrameShadow(QFrame.Sunken)
+        self.layout.addWidget(self.separator)
+
+        # Buttons for Delete, Create Project, and AI Suggestions
+        self.function_button_layout = QHBoxLayout()
+        self.function_button_layout.setSpacing(10)
+        self.delete_button = QPushButton("Delete")
+        self.delete_button.setFixedSize(200, 50)
+        
+        self.create_button = QPushButton("Create Project Structure")
+        self.create_button.setFixedSize(200, 50)
+        self.create_button.clicked.connect(self.create_structure)
+        
+        self.get_ai_suggestions_button = QPushButton("Get AI Suggestions")
+        self.get_ai_suggestions_button.setFixedSize(200, 50)
+        self.get_ai_suggestions_button.clicked.connect(self.get_ai_suggestions_for_structure)
+
+        self.function_button_layout.addWidget(self.delete_button)
+        self.function_button_layout.addWidget(self.create_button)
+        self.function_button_layout.addWidget(self.get_ai_suggestions_button)
+
+        self.layout.addLayout(self.function_button_layout)
+
+        # Separator to visually differentiate
+        self.separator_2 = QFrame()
+        self.separator_2.setFrameShape(QFrame.HLine)
+        self.separator_2.setFrameShadow(QFrame.Sunken)
+        self.layout.addWidget(self.separator_2)
+
+        # Textbox for logging
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setStyleSheet("font-size: 14px;")
+        self.layout.addWidget(self.log_text)
+
+        # Apply initial theme (light theme)
+        self.apply_light_theme()
+
+    def toggle_theme(self):
+        current_palette = self.palette()
+        if current_palette.color(QPalette.Window) == QColor(Qt.white):
+            self.apply_dark_theme()
+        else:
+            self.apply_light_theme()
+
+    def apply_light_theme(self):
+        self.setStyleSheet("background-color: white; color: black;")
+        self.project_name_label.setStyleSheet("font-size: 16px; color: black;")
+        self.api_key_label.setStyleSheet("font-size: 16px; color: black;")
+        self.history_label.setStyleSheet("font-size: 16px; color: black;")
+        self.manual_add_toggle.setStyleSheet("font-size: 14px; color: black;")
+        self.theme_button.setStyleSheet("background-color: #8A2BE2; font-size: 14px; color: white;")
+        self.add_sibling_folder_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.add_sibling_file_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.add_child_folder_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.delete_button.setStyleSheet("background-color: #FF6347; font-size: 14px; color: white;")
+        self.create_button.setStyleSheet("background-color: #1E90FF; font-size: 14px; color: white;")
+        self.get_ai_suggestions_button.setStyleSheet("background-color: #32CD32; font-size: 14px; color: white;")
+
+    def apply_dark_theme(self):
+        self.setStyleSheet("background-color: #2E2E2E; color: white;")
+        self.project_name_label.setStyleSheet("font-size: 16px; color: white;")
+        self.api_key_label.setStyleSheet("font-size: 16px; color: white;")
+        self.history_label.setStyleSheet("font-size: 16px; color: white;")
+        self.manual_add_toggle.setStyleSheet("font-size: 14px; color: white;")
+        self.theme_button.setStyleSheet("background-color: #8A2BE2; font-size: 14px; color: white;")
+        self.add_sibling_folder_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.add_sibling_file_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.add_child_folder_button.setStyleSheet("background-color: #4682B4; font-size: 14px; color: white;")
+        self.delete_button.setStyleSheet("background-color: #FF6347; font-size: 14px; color: white;")
+        self.create_button.setStyleSheet("background-color: #1E90FF; font-size: 14px; color: white;")
+        self.get_ai_suggestions_button.setStyleSheet("background-color: #32CD32; font-size: 14px; color: white;")
+
+    def toggle_manual_add(self, checked):
+        self.add_sibling_folder_button.setEnabled(not checked)
+        self.add_sibling_file_button.setEnabled(not checked)
+        self.add_child_folder_button.setEnabled(not checked)
+        self.manual_paste_text.setDisabled(not checked)
+
+    def load_history_options(self):
+        history_options = load_history()
+        self.history_names = [list(entry.keys())[0] for entry in history_options] if history_options else []
+        self.history_dropdown.addItems(self.history_names)
+
+    def load_selected_history(self):
+        selected_project = self.history_dropdown.currentText()
         if not selected_project:
             return
 
+        history_options = load_history()
         for entry in history_options:
             if selected_project in entry:
-                tree.delete(*tree.get_children())
+                self.tree.clear()
                 project_structure = entry[selected_project]
-                build_tree_from_dict(tree, '', project_structure)
+                self.build_tree_from_dict(self.tree, project_structure)
                 break
 
-    load_history_button = ctk.CTkButton(history_frame, text="Load", command=load_selected_history)
-    load_history_button.pack(anchor='w', pady=10)
+    def build_tree_from_dict(self, tree, structure, parent=None):
+        for key, value in structure.items():
+            node = QTreeWidgetItem(parent, [key])
+            node.setData(0, Qt.UserRole, "folder" if isinstance(value, dict) else "file")
+            if parent is None:
+                tree.addTopLevelItem(node)
+            if isinstance(value, dict):
+                self.build_tree_from_dict(tree, value, node)
 
-    # Treeview for project structure visualization
-    tree_frame = ctk.CTkFrame(main_frame)
-    tree_frame.grid(row=2, column=0, columnspan=3, sticky='nsew', padx=10, pady=10)
-    tree = ttk.Treeview(tree_frame, columns=('type',), show="tree", selectmode="browse")
-    tree.heading('#0', text='Project Structure')
-    tree.pack(fill=ctk.BOTH, expand=True)
-
-    # Buttons to Add Elements
-    def add_sibling_folder():
-        selected_item = tree.selection()
-        if not selected_item:
-            parent = ""
+    def add_sibling_folder(self):
+        selected_item = self.tree.selectedItems()
+        if selected_item:
+            parent = selected_item[0].parent()
         else:
-            parent = tree.parent(selected_item[0])
-        element_name = simpledialog.askstring("New Folder", "Enter folder name:")
-        if element_name:
-            add_project_element(tree, parent, element_name, "folder")
+            parent = None
+        element_name, ok = QInputDialog.getText(self, "New Folder", "Enter folder name:")
+        if ok and element_name:
+            add_project_element(self.tree, parent if parent else self.tree.invisibleRootItem(), element_name, "folder")
 
-    def add_sibling_file():
-        selected_item = tree.selection()
-        if not selected_item:
-            parent = ""
+    def add_sibling_file(self):
+        selected_item = self.tree.selectedItems()
+        if selected_item:
+            parent = selected_item[0].parent()
         else:
-            parent = tree.parent(selected_item[0])
-        element_name = simpledialog.askstring("New File", "Enter file name (with extension):")
-        if element_name:
-            add_project_element(tree, parent, element_name, "file")
+            parent = None
+        element_name, ok = QInputDialog.getText(self, "New File", "Enter file name (with extension):")
+        if ok and element_name:
+            add_project_element(self.tree, parent if parent else self.tree.invisibleRootItem(), element_name, "file")
 
-    def add_child_folder():
-        selected_item = tree.selection()
+    def add_child_folder(self):
+        selected_item = self.tree.selectedItems()
         if not selected_item:
-            messagebox.showerror("Selection Error", "Please select a folder where you want to add a child folder.")
+            QMessageBox.critical(self, "Selection Error", "Please select a folder where you want to add a child folder.")
             return
-        item_type = tree.set(selected_item[0], "type")
+        item_type = selected_item[0].data(0, Qt.UserRole)
         if item_type != 'folder':
-            messagebox.showerror("Selection Error", "Cannot add a child folder to a file.")
+            QMessageBox.critical(self, "Selection Error", "Cannot add a child folder to a file.")
             return
-        element_name = simpledialog.askstring("New Folder", "Enter child folder name:")
-        if element_name:
-            add_project_element(tree, selected_item[0], element_name, "folder")
+        element_name, ok = QInputDialog.getText(self, "New Folder", "Enter child folder name:")
+        if ok and element_name:
+            add_project_element(self.tree, selected_item[0], element_name, "folder")
 
-    def delete_selected_item():
-        selected_item = tree.selection()
+    def delete_selected_item(self):
+        selected_item = self.tree.selectedItems()
         if not selected_item:
-            messagebox.showerror("Selection Error", "Please select an item to delete.")
+            QMessageBox.critical(self, "Selection Error", "Please select an item to delete.")
             return
-        tree.delete(selected_item[0])
+        root = self.tree.invisibleRootItem()
+        (parent := selected_item[0].parent()) if selected_item[0].parent() else root.removeChild(selected_item[0])
 
-    def get_ai_suggestions_for_structure():
-        prompt = simpledialog.askstring("AI Suggestions", "Enter a brief description of your project (e.g., 'React app structure'):" )
-        api_key = api_key_entry.get().strip()
-        if prompt:
-            suggestions = get_ai_suggestions(f"Suggest a folder and file structure for a project that is: {prompt}", api_key)
-            if "Error:" in suggestions:
-                messagebox.showerror("AI Error", suggestions)
-            else:
-                tree.delete(*tree.get_children())
-                try:
-                    suggested_structure = json.loads(suggestions)
-                    build_tree_from_dict(tree, '', suggested_structure)
-                except json.JSONDecodeError:
-                    messagebox.showerror("Error", "Failed to parse AI suggestions into a valid structure.")
-
-    # Create buttons for the actions
-    add_sibling_folder_button = ctk.CTkButton(main_frame, text="Add Sibling Folder", command=add_sibling_folder)
-    add_sibling_folder_button.grid(row=3, column=0, pady=10)
-
-    add_sibling_file_button = ctk.CTkButton(main_frame, text="Add Sibling File", command=add_sibling_file)
-    add_sibling_file_button.grid(row=3, column=1, pady=10)
-
-    add_child_folder_button = ctk.CTkButton(main_frame, text="Add Child Folder", command=add_child_folder)
-    add_child_folder_button.grid(row=3, column=2, pady=10)
-
-    delete_button = ctk.CTkButton(main_frame, text="Delete", command=delete_selected_item, fg_color="red")
-    delete_button.grid(row=4, column=1, pady=10)
-
-    get_ai_suggestions_button = ctk.CTkButton(main_frame, text="Get AI Suggestions", command=get_ai_suggestions_for_structure, fg_color="green")
-    get_ai_suggestions_button.grid(row=4, column=2, pady=10)
-
-    # Button to create the project structure
-    def create_structure():
-        output_directory = filedialog.askdirectory(title="Select Output Directory")
+    def create_structure(self):
+        output_directory = QFileDialog.getExistingDirectory(self, "Select Output Directory")
         if not output_directory:
             return
 
-        project_name = project_name_entry.get().strip()
+        project_name = self.project_name_entry.text().strip()
         if not project_name:
-            messagebox.showerror("Error", "Project name cannot be empty.")
+            QMessageBox.critical(self, "Error", "Project name cannot be empty.")
             return
 
-        project_structure_dict = {project_name: parse_tree_to_dict(tree)}
-        create_project_structure(output_directory, project_structure_dict, log_text)
+        project_structure_dict = {project_name: parse_tree_to_dict(self.tree)}
+        create_project_structure(output_directory, project_structure_dict, self.log_text)
         save_history(project_structure_dict)
+        QMessageBox.information(self, "Success", "Project structure created and saved successfully!")
 
-    create_button = ctk.CTkButton(main_frame, text="Create Project", command=create_structure, fg_color="blue")
-    create_button.grid(row=5, column=1, pady=10)
-
-    # ScrolledText widget for logging
-    log_text = ctk.CTkTextbox(main_frame, wrap=ctk.WORD)
-    log_text.grid(row=6, column=0, columnspan=3, pady=10, sticky='nsew')
-
-    root.mainloop()
-
-def build_tree_from_dict(tree, parent, structure):
-    for key, value in structure.items():
-        if isinstance(value, dict):
-            node = tree.insert(parent, 'end', text=key, open=True)
-            tree.set(node, "type", "folder")
-            build_tree_from_dict(tree, node, value)
-        else:
-            node = tree.insert(parent, 'end', text=key, open=False)
-            tree.set(node, "type", "file")
+    def get_ai_suggestions_for_structure(self):
+        prompt = QInputDialog.getText(self, "AI Suggestions", "Enter a brief description of your project (e.g., 'React app structure'):")[0]
+        api_key = self.api_key_entry.text().strip()
+        if prompt:
+            suggestions = get_ai_suggestions(f"Suggest a folder and file structure for a project that is: {prompt}", api_key)
+            if "Error:" in suggestions:
+                QMessageBox.critical(self, "AI Error", suggestions)
+            else:
+                self.tree.clear()
+                try:
+                    suggested_structure = json.loads(suggestions)
+                    self.build_tree_from_dict(self.tree, suggested_structure)
+                except json.JSONDecodeError:
+                    QMessageBox.critical(self, "Error", "Failed to parse AI suggestions into a valid structure.")
 
 if __name__ == "__main__":
-    main()
+    app = QApplication([])
+    window = ProjectStructureApp()
+    window.show()
+    app.exec()
