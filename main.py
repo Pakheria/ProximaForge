@@ -1,9 +1,23 @@
 import os
 import json
-import time
 import tkinter as tk
+from tkinter import messagebox, filedialog, scrolledtext, ttk
+import re
+import errno
+import time
 
-from tkinter import messagebox, filedialog, scrolledtext
+HISTORY_FILE = "project_history.json"
+TEMPLATES_FILE = "templates.json"
+
+def load_templates():
+    """
+    Load templates from a JSON file for project structure templates.
+    """
+    if os.path.exists(TEMPLATES_FILE):
+        with open(TEMPLATES_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
 
 def create_project_structure(base_path, structure, log_text):
     """
@@ -42,6 +56,7 @@ def create_project_structure(base_path, structure, log_text):
     except Exception as e:
         log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] Failed to create project structure: {str(e)}\n")
 
+
 def parse_tree_structure_to_dict(tree_structure):
     """
     Parse a tree-like folder structure text to a dictionary.
@@ -52,17 +67,18 @@ def parse_tree_structure_to_dict(tree_structure):
 
     for line in lines:
         # Remove all leading special characters used for tree representation and clean the line
-        cleaned_line = line.lstrip('│├└─| ').strip()
+        cleaned_line = line.lstrip('│├└─| \t').strip()
 
         # Skip empty lines or invalid lines
         if not cleaned_line:
             continue
 
-        # Determine the depth based on leading spaces (each level is 4 spaces)
-        depth = (len(line) - len(cleaned_line)) // 4
-
-        # Debugging: Print cleaned line and its depth
-        print(f"Cleaned Line: '{cleaned_line}', Depth: {depth}")
+        # Determine the depth based on leading spaces or tabs (each level is represented by either 4 spaces or a tab)
+        leading_whitespace = len(line) - len(cleaned_line)
+        if '\t' in line[:leading_whitespace]:
+            depth = line[:leading_whitespace].count('\t')
+        else:
+            depth = leading_whitespace // 4
 
         # Check if it's a folder or file by checking if it ends with a '/'
         if cleaned_line.endswith('/') or '.' not in cleaned_line:
@@ -95,6 +111,35 @@ def parse_tree_structure_to_dict(tree_structure):
 
     return structure_dict
 
+
+def save_history(structure):
+    """
+    Save the provided project structure to history for future use.
+    """
+    try:
+        if os.path.exists(HISTORY_FILE):
+            with open(HISTORY_FILE, 'r') as f:
+                history = json.load(f)
+        else:
+            history = []
+
+        history.append(structure)
+        with open(HISTORY_FILE, 'w') as f:
+            json.dump(history, f, indent=4)
+    except Exception as e:
+        print(f"Failed to save history: {str(e)}")
+
+
+def load_history():
+    """
+    Load the saved project history.
+    """
+    if os.path.exists(HISTORY_FILE):
+        with open(HISTORY_FILE, 'r') as f:
+            return json.load(f)
+    return []
+
+
 def select_directory():
     """
     Open a dialog to select the directory where the project structure will be created.
@@ -104,6 +149,7 @@ def select_directory():
         messagebox.showwarning("Warning", "No directory selected. Please select a directory.")
         return None
     return os.path.normpath(folder_selected)
+
 
 def load_file():
     """
@@ -115,22 +161,72 @@ def load_file():
             return f.read()
     return None
 
+
 def main():
     # Initialize the main GUI window
     root = tk.Tk()
     root.title("Project Structure Creator")
-    root.geometry("1280x768")
+    root.state('zoomed')  # Start in maximized mode
+
+    # Load templates from external JSON file
+    templates = load_templates()
+
+    # Create the main frame
+    main_frame = tk.Frame(root)
+    main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+    # Instructions frame on the left
+    instructions_frame = tk.Frame(main_frame, width=300)
+    instructions_frame.pack(side=tk.LEFT, fill=tk.Y, padx=10, pady=10)
+
+    instruction_text = """
+    Instructions:
+    1. Enter your project structure in the text area (use tabs or 4 spaces for indentation).
+    2. Load a project structure from a text file if needed.
+    3. Select a pre-defined template from the dropdown menu.
+    4. Click 'Convert and Show Structure' to view the parsed structure.
+    5. Click 'Create Project Structure' to generate files and folders.
+    6. The history of all previously created structures is saved and can be reused.
+
+    Example Input Format:
+    ProjectRoot
+        main.py
+        config.py
+        FirstFolder
+            file1.txt
+            SecondFolder
+                file2.txt
+    """
+    instructions_label = tk.Label(instructions_frame, text=instruction_text, justify=tk.LEFT, anchor='nw')
+    instructions_label.pack(fill=tk.Y)
+
+    # Project structure frame on the right
+    project_frame = tk.Frame(main_frame)
+    project_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
     # Label for instructions
-    instruction_label = tk.Label(root, text="Enter your project structure (e.g. tree-like format) or load from a text file:")
+    instruction_label = tk.Label(project_frame, text="Enter your project structure (e.g. tree-like format) or load from a text file:")
     instruction_label.pack(pady=10)
 
+    # Dropdown menu for templates
+    def select_template(event):
+        template_name = template_dropdown.get()
+        if template_name in templates:
+            text_area.delete('1.0', tk.END)
+            text_area.insert(tk.END, templates[template_name])
+
+    template_label = tk.Label(project_frame, text="Select a Template:")
+    template_label.pack(pady=5)
+    template_dropdown = ttk.Combobox(project_frame, values=list(templates.keys()))
+    template_dropdown.bind("<<ComboboxSelected>>", select_template)
+    template_dropdown.pack(pady=5)
+
     # ScrolledText widget for project structure input
-    text_area = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=20)
+    text_area = scrolledtext.ScrolledText(project_frame, wrap=tk.WORD, width=100, height=20)
     text_area.pack(pady=10)
 
     # ScrolledText widget for logging
-    log_text = scrolledtext.ScrolledText(root, wrap=tk.WORD, width=100, height=10)
+    log_text = scrolledtext.ScrolledText(project_frame, wrap=tk.WORD, width=100, height=10)
     log_text.pack(pady=10)
 
     # Button to load file
@@ -140,76 +236,84 @@ def main():
             text_area.delete('1.0', tk.END)
             text_area.insert(tk.END, file_content)
 
-    load_file_button = tk.Button(root, text="Load from File", command=load_file_content)
+    load_file_button = tk.Button(project_frame, text="Load from File", command=load_file_content)
     load_file_button.pack(pady=5)
+
+    # Button to load history
+    def load_history_content():
+        history = load_history()
+        if history:
+            # Display a history selection window
+            history_window = tk.Toplevel(root)
+            history_window.title("Select from History")
+            history_window.geometry("600x400")
+
+            history_listbox = tk.Listbox(history_window, width=100, height=20)
+            history_listbox.pack(pady=10, padx=10)
+
+            for idx, item in enumerate(history):
+                history_listbox.insert(tk.END, f"History {idx + 1}: {list(item.keys())[0]}")
+
+            def select_history():
+                selected_idx = history_listbox.curselection()
+                if selected_idx:
+                    selected_structure = history[selected_idx[0]]
+                    text_area.delete('1.0', tk.END)
+                    text_area.insert(tk.END, json.dumps(selected_structure, indent=4))
+                    history_window.destroy()
+
+            select_button = tk.Button(history_window, text="Select", command=select_history)
+            select_button.pack(pady=5)
+        else:
+            messagebox.showinfo("History", "No history found.")
+
+    load_history_button = tk.Button(project_frame, text="Load from History", command=load_history_content)
+    load_history_button.pack(pady=5)
 
     # Button to convert project structure to dictionary and display
     def convert_and_display_structure():
-        project_text = text_area.get("1.0", tk.END).strip()
-        if not project_text:
-            messagebox.showwarning("Warning", "Please provide the project structure.")
-            return
-
-        project_structure = parse_tree_structure_to_dict(project_text)
-        if not project_structure:
-            messagebox.showerror("Error", "Failed to parse the project structure. Please check the input format.")
-            return
-
-        # Display the converted dictionary in a new window
-        dict_window = tk.Toplevel(root)
-        dict_window.title("Converted Project Structure Dictionary")
-        dict_window.geometry("600x400")
-
-        dict_text = scrolledtext.ScrolledText(dict_window, wrap=tk.WORD, width=70, height=20)
-        dict_text.pack(pady=10)
-        dict_text.insert(tk.END, json.dumps(project_structure, indent=4))
-
-    convert_button = tk.Button(root, text="Convert and Show Structure", command=convert_and_display_structure)
-    convert_button.pack(pady=5)
-
-    # Button to select directory and create project structure
-    def select_directory_and_create():
-        project_text = text_area.get("1.0", tk.END).strip()
-        if not project_text:
-            messagebox.showwarning("Warning", "Please provide the project structure.")
+        tree_structure = text_area.get('1.0', tk.END).strip()
+        if not tree_structure:
+            messagebox.showerror("Error", "Please enter a project structure or load one.")
             return
 
         try:
-            # Try to load JSON structure first
-            project_structure = json.loads(project_text)
-        except json.JSONDecodeError:
-            # If JSON fails, use tree structure parsing
-            project_structure = parse_tree_structure_to_dict(project_text)
+            project_structure_dict = parse_tree_structure_to_dict(tree_structure)
+            # Show parsed structure as a pop-up instead of logging multiple times
+            parsed_window = tk.Toplevel(root)
+            parsed_window.title("Parsed Structure")
+            parsed_window.geometry("600x400")
+            parsed_text = scrolledtext.ScrolledText(parsed_window, wrap=tk.WORD, width=80, height=20)
+            parsed_text.pack(pady=10)
+            parsed_text.insert(tk.END, json.dumps(project_structure_dict, indent=4))
+        except Exception as e:
+            log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] Failed to convert structure: {str(e)}\n")
 
-        if not project_structure:
-            messagebox.showerror("Error", "Failed to parse the project structure. Please check the input format.")
+    convert_button = tk.Button(project_frame, text="Convert and Show Structure", command=convert_and_display_structure)
+    convert_button.pack(pady=5)
+
+    # Button to create the project structure
+    def create_structure():
+        output_directory = select_directory()
+        if not output_directory:
             return
 
-        # Remove any empty string keys from the project structure
-        project_structure = {k: v for k, v in project_structure.items() if k}
-
-        # Select the base path for creating the project structure
-        base_path = select_directory()
-        if not base_path:
+        tree_structure = text_area.get('1.0', tk.END).strip()
+        if not tree_structure:
+            messagebox.showerror("Error", "Please enter a project structure or load one.")
             return
 
-        # Treat the project structure root key as the root folder
-        root_key = list(project_structure.keys())[0]
-        root_structure = project_structure[root_key]
-        root_folder_path = os.path.join(base_path, root_key)
+        try:
+            project_structure_dict = parse_tree_structure_to_dict(tree_structure)
+            create_project_structure(output_directory, project_structure_dict, log_text)
+            save_history(project_structure_dict)
+        except Exception as e:
+            log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] Failed to create project: {str(e)}\n")
 
-        # Create the root folder if applicable and everything inside it
-        if not os.path.exists(root_folder_path):
-            os.makedirs(root_folder_path, exist_ok=True)
-            log_text.insert(tk.END, f"[{time.strftime('%H:%M:%S')}] Created root folder: {root_folder_path}\n")
+    create_button = tk.Button(project_frame, text="Create Project Structure", command=create_structure)
+    create_button.pack(pady=5)
 
-        # Create the entire project structure under the root folder
-        create_project_structure(root_folder_path, root_structure, log_text)
-
-    create_button = tk.Button(root, text="Create Project Structure", command=select_directory_and_create)
-    create_button.pack(pady=20)
-
-    # Run the main loop
+    # Start the main loop
     root.mainloop()
 
 if __name__ == "__main__":

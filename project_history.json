@@ -1,0 +1,45 @@
+[
+    {
+        "Flask": {
+            "main.py": null,
+            ".env": null,
+            "test": {
+                "js": {},
+                "css": {},
+                "fonts": {}
+            }
+        }
+    },
+    {
+        "flask2": {
+            "main.py": null,
+            ".env": null,
+            "test": {
+                "js": {},
+                "css": {},
+                "fonts": {}
+            }
+        }
+    },
+    {
+        "react": {
+            "app": {},
+            "src": {
+                "app": {},
+                "route.ts": null
+            }
+        }
+    },
+    {
+        "asdasd": {}
+    },
+    {
+        "react2": {
+            "app": {},
+            "src": {
+                "app": {},
+                "route.ts": null
+            }
+        }
+    }
+]

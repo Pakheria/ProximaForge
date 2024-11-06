@@ -1,0 +1,20 @@
+{
+    "React_App": {
+        "my-react-app": {
+            "public": {
+                "index.html": null,
+                "favicon.ico": null
+            },
+            "src": {
+                "App.js": null,
+                "index.js": null,
+                "components": {
+                    "Header.js": null,
+                    "Footer.js": null
+                }
+            },
+            "package.json": null,
+            "README.md": null
+        }
+    }
+}
